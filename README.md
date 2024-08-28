@@ -1,15 +1,20 @@
-# SQL to PHP Array Converter
+# SQL Converter
 
-This Docker-based FastAPI web application converts SQL INSERT statements into PHP arrays. It provides a simple web interface for uploading SQL files and returns a PHP file containing the converted data structures.
+This Docker-based FastAPI web application provides two conversion utilities:
+1. Converts SQL INSERT statements into PHP arrays
+2. Converts SQL CREATE TABLE statements into Laravel migrations
+
+It offers a simple web interface with tabs for easy access to both features.
 
 ## Features
 
 - Docker-containerized for easy deployment and consistency across environments
-- Web-based interface for easy file upload
+- Web-based interface with tabbed layout for easy access to both conversion utilities
 - Converts SQL INSERT statements to PHP arrays
+- Converts SQL CREATE TABLE statements to Laravel migrations
 - Handles multiple tables in a single SQL file
 - Properly manages NULL values and empty strings
-- Returns the converted data as a downloadable PHP file
+- Returns the converted data as downloadable files (PHP file or ZIP file for migrations)
 - Automatically cleans up temporary files
 
 ## Requirements
@@ -21,13 +26,13 @@ This Docker-based FastAPI web application converts SQL INSERT statements into PH
 
 1. Clone this repository:
    ```
-   git clone https://github.com/yourusername/sql-to-php-converter.git
-   cd sql-to-php-converter
+   git clone https://github.com/yourusername/sql-converter.git
+   cd sql-converter
    ```
 
 2. Build the Docker image:
    ```
-   docker build -t sql-to-php-converter .
+   docker build -t sql-converter .
    ```
 
 ## Usage
@@ -36,7 +41,7 @@ This Docker-based FastAPI web application converts SQL INSERT statements into PH
 
 1. Start the container:
    ```
-   docker run -d -p 8000:8000 sql-to-php-converter
+   docker run -d -p 8000:8000 sql-converter
    ```
 
 2. Open a web browser and navigate to `http://localhost:8000`
@@ -50,14 +55,17 @@ This Docker-based FastAPI web application converts SQL INSERT statements into PH
 
 2. Open a web browser and navigate to `http://localhost:8000`
 
-3. Use the web interface to upload your SQL file containing INSERT statements
+3. Use the web interface to choose between SQL to PHP Array or SQL to Laravel Migration conversion
 
-4. The application will process the file and return a converted PHP file for download
+4. Upload your SQL file containing either INSERT or CREATE TABLE statements
+
+5. The application will process the file and return a converted file for download (PHP file or ZIP file)
 
 ## API Endpoints
 
-- `GET /`: Renders the HTML form for file upload
-- `POST /convert/`: Accepts a SQL file upload, converts it, and returns the PHP file
+- `GET /`: Renders the HTML page with tabs for both conversion options
+- `POST /convert/php`: Accepts a SQL file upload, converts INSERT statements to PHP arrays, and returns a PHP file
+- `POST /convert/laravel`: Accepts a SQL file upload, converts CREATE TABLE statements to Laravel migrations, and returns a ZIP file
 
 ## File Structure
 
@@ -65,16 +73,17 @@ This Docker-based FastAPI web application converts SQL INSERT statements into PH
 - `Dockerfile`: Defines how to build the Docker image for this application
 - `docker-compose.yml`: Defines the services, networks, and volumes for Docker Compose
 - `requirements.txt`: Lists the Python dependencies for the project
+- `static/styles.css`: CSS file for styling the web interface
 - `README.md`: This file, containing project documentation
 
 ## Development
 
 To make changes to the application:
 
-1. Modify the code in `app.py`
+1. Modify the code in `app.py` or `static/styles.css`
 2. Rebuild the Docker image:
    ```
-   docker build -t sql-to-php-converter .
+   docker build -t sql-converter .
    ```
 3. Restart your container or Docker Compose services
 
