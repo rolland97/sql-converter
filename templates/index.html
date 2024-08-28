@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>SQL Converter</title>
+        <link rel="stylesheet" href="/static/styles.css">
+    </head>
+    <body>
+        <div class="container">
+            <h1>SQL Converter</h1>
+            <div class="tab">
+                <button class="tablinks" onclick="openTab(event, 'PHPArray')" id="defaultOpen">PHP Array</button>
+                <button class="tablinks" onclick="openTab(event, 'LaravelMigration')">Laravel Migration</button>
+            </div>
+
+            <div id="PHPArray" class="tabcontent">
+                <h2>SQL to PHP Array Converter</h2>
+                <form action="/convert/php" method="post" enctype="multipart/form-data">
+                    <input type="file" name="file" accept=".sql">
+                    <input type="submit" value="Convert to PHP Array">
+                </form>
+            </div>
+
+            <div id="LaravelMigration" class="tabcontent">
+                <h2>SQL to Laravel Migration Converter</h2>
+                <form action="/convert/laravel" method="post" enctype="multipart/form-data">
+                    <input type="file" name="file" accept=".sql">
+                    <input type="submit" value="Convert to Laravel Migration">
+                </form>
+            </div>
+        </div>
+
+        <script>
+        function openTab(evt, tabName) {
+            var i, tabcontent, tablinks;
+            tabcontent = document.getElementsByClassName("tabcontent");
+            for (i = 0; i < tabcontent.length; i++) {
+                tabcontent[i].style.display = "none";
+            }
+            tablinks = document.getElementsByClassName("tablinks");
+            for (i = 0; i < tablinks.length; i++) {
+                tablinks[i].className = tablinks[i].className.replace(" active", "");
+            }
+            document.getElementById(tabName).style.display = "block";
+            evt.currentTarget.className += " active";
+        }
+
+        // Get the element with id="defaultOpen" and click on it
+        document.getElementById("defaultOpen").click();
+        </script>
+    </body>
+    </html>
