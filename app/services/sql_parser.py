@@ -2,17 +2,18 @@
 
 import re
 import json
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Tuple
 from app.config import settings
 import logging
 
 logger = logging.getLogger(__name__)
 
-def parse_sql_content(content: str) -> Dict[str, List[Dict[str, Any]]]:
+def parse_sql_content(content: str) -> Tuple[Dict[str, List[Dict[str, Any]]], Dict[str, int]]:
     insert_pattern = r"INSERT INTO `(\w+)` \((.*?)\) VALUES\s*([\s\S]*?)(?:;|\Z)"
     matches = re.findall(insert_pattern, content, re.DOTALL)
     
     result = {}
+    total_rows = {}
     for match in matches:
         table_name = match[0]
         columns = [col.strip().strip('`') for col in match[1].split(',')]
@@ -23,6 +24,8 @@ def parse_sql_content(content: str) -> Dict[str, List[Dict[str, Any]]]:
         
         row_pattern = r"\((.*?)\)"
         rows = re.findall(row_pattern, values_block)
+        
+        total_rows[table_name] = len(rows)
         
         for row in rows[:settings.MAX_INSERT_ROWS]:
             values = re.findall(r'"((?:\\.|[^"\\])*)"|\b(NULL)\b|(-?\d+(?:\.\d+)?)|\'((?:\\.|[^\'\\])*)\'', row)
@@ -50,24 +53,4 @@ def parse_sql_content(content: str) -> Dict[str, List[Dict[str, Any]]]:
         if len(rows) > settings.MAX_INSERT_ROWS:
             logger.warning(f"Table {table_name} exceeded MAX_INSERT_ROWS. Truncated to {settings.MAX_INSERT_ROWS} rows.")
 
-    return result
-
-def parse_sql_file_for_migration(content: str) -> List[tuple]:
-    create_table_pattern = r"CREATE TABLE `(\w+)` \(([\s\S]*?)\) ENGINE=(\w+).*?;"
-    return re.findall(create_table_pattern, content, re.DOTALL)
-
-def parse_column_definition(column_def: str) -> Dict[str, Any]:
-    column_pattern = r"`(\w+)`\s+([\w()]+)(?:\s+(\w+))?(?:\s+(\w+))?(?:\s+DEFAULT\s+(.*?))?(?:\s+COMMENT\s+'(.*?)')?,?"
-    match = re.match(column_pattern, column_def.strip())
-    
-    if match:
-        name, type, unsigned, nullable, default, comment = match.groups()
-        return {
-            'name': name,
-            'type': type,
-            'unsigned': unsigned == 'unsigned',
-            'nullable': nullable != 'NOT NULL',
-            'default': default,
-            'comment': comment
-        }
-    return None
+    return result, total_rows

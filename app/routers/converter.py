@@ -5,6 +5,7 @@ import tempfile
 import io
 import zipfile
 import logging
+import datetime
 from fastapi import APIRouter, File, UploadFile, HTTPException, BackgroundTasks
 from fastapi.responses import HTMLResponse, FileResponse
 from app.services import sql_parser, php_formatter, migration_generator
@@ -31,21 +32,44 @@ async def convert_sql_to_php_array(background_tasks: BackgroundTasks, file: Uplo
     content = content.decode('utf-8')
     
     try:
-        result = sql_parser.parse_sql_content(content)
-        php_array = php_formatter.format_as_php_array(result)
+        result, total_rows = sql_parser.parse_sql_content(content)
+        php_array, large_files = php_formatter.format_as_php_array(result, total_rows)
         
-        base_name = os.path.splitext(file.filename)[0]
-        output_filename = f"{base_name}_{settings.DEFAULT_PHP_FILENAME}"
-        
-        temp_path = file_handlers.create_temp_file(f"<?php\n\n{php_array}\n?>", '.php')
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        if large_files:
+            zip_filename = os.path.join('/app/temp', f"php_arrays_{timestamp}.zip")
+            with zipfile.ZipFile(zip_filename, 'w') as zipf:
+                main_file = file_handlers.create_temp_file(f"<?php\n\n{php_array}\n?>", '.php')
+                zipf.write(main_file, os.path.basename(main_file))
+                for large_file in large_files:
+                    zipf.write(large_file, os.path.basename(large_file))
+                    os.remove(large_file)  # Clean up individual files
+            
+            background_tasks.add_task(os.unlink, zip_filename)
+            
+            return FileResponse(
+                path=zip_filename,
+                filename=os.path.basename(zip_filename),
+                media_type='application/zip'
+            )
+        else:
+            # If no large files, proceed with the original method
+            base_name = os.path.splitext(file.filename)[0]
+            output_filename = f"{base_name}_{settings.DEFAULT_PHP_FILENAME}"
+            
+            temp_path = file_handlers.create_temp_file(
+                content=f"<?php\n\n{php_array}\n?>",
+                suffix='.php',
+                prefix='php_array'
+            )
 
-        background_tasks.add_task(os.unlink, temp_path)
+            background_tasks.add_task(os.unlink, temp_path)
 
-        return FileResponse(
-            path=temp_path, 
-            filename=output_filename, 
-            media_type='application/php'
-        )
+            return FileResponse(
+                path=temp_path, 
+                filename=output_filename, 
+                media_type='application/php'
+            )
 
     except Exception as e:
         logger.error(f"Error processing file {file.filename}: {str(e)}")

@@ -38,6 +38,12 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     --mount=type=bind,source=requirements.txt,target=requirements.txt \
     python -m pip install -r requirements.txt
 
+# Create a directory for temporary files and set permissions
+RUN mkdir /app/temp && chown appuser:appuser /app/temp
+
+# Set the working directory to /app/temp
+WORKDIR /app/temp
+
 # Switch to the non-privileged user to run the application.
 USER appuser
 
