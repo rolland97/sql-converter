@@ -13,6 +13,11 @@ services:
       context: .
     ports:
       - 8001:8001
+    command: >
+      sh -c "uvicorn app:app --host=0.0.0.0 --port=8001 & 
+              sleep 2 &&
+              echo 'You can access the application at http://localhost:8001' &&
+              wait"
 
 # The commented out section below is an example of how to define a PostgreSQL
 # database that your application can use. `depends_on` tells Docker Compose to

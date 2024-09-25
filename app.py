@@ -1,12 +1,14 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks
-from fastapi.responses import JSONResponse, HTMLResponse, FileResponse
-from fastapi.staticfiles import StaticFiles
-from starlette.requests import Request
 import re
 import os
 import tempfile
 import zipfile
 import io
+import json
+
+from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks
+from fastapi.responses import JSONResponse, HTMLResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
+from starlette.requests import Request
 
 app = FastAPI()
 # Mount a static directory for CSS
@@ -20,7 +22,7 @@ def parse_sql_content(content):
     result = {}
     for match in matches:
         table_name = match[0]
-        columns = [col.strip('`') for col in match[1].split(',')]
+        columns = [col.strip().strip('`') for col in match[1].split(',')]
         values_block = match[2]
         
         if table_name not in result:
@@ -31,16 +33,26 @@ def parse_sql_content(content):
         rows = re.findall(row_pattern, values_block)
         
         for row in rows:
-            values = re.findall(r'"([^"]*)"|\b(NULL)\b|(\d+)|\'([^\']*)\'', row)
+            values = re.findall(r'"((?:\\.|[^"\\])*)"|\b(NULL)\b|(-?\d+(?:\.\d+)?)|\'((?:\\.|[^\'\\])*)\'', row)
             # Process values
             processed_values = []
             for v in values:
                 if v[1] == 'NULL':
-                    processed_values.append('null')  # PHP null
-                elif v[0] == '' and v[1] == '' and v[2] == '' and v[3] == '':
-                    processed_values.append("None")  # Python "None" for empty values
+                    processed_values.append(None)
+                elif v[2]:  # This is a numeric value
+                    processed_values.append(float(v[2]) if '.' in v[2] else int(v[2]))
+                elif v[0] or v[3]:  # This is a string value
+                    value = v[0] or v[3]
+                    try:
+                        # Try to parse as JSON if it looks like JSON
+                        if value.startswith('{') and value.endswith('}'):
+                            processed_values.append(json.loads(value))
+                        else:
+                            processed_values.append(value)
+                    except json.JSONDecodeError:
+                        processed_values.append(value)
                 else:
-                    processed_values.append(v[0] or v[2] or v[3])  # Non-empty string or number
+                    processed_values.append(None)
             
             # Create a dictionary for this row
             row_dict = dict(zip(columns, processed_values))
@@ -56,11 +68,15 @@ def format_as_php_array(data):
             row_str = "    ["
             row_items = []
             for k, v in row.items():
-                if v == "None":
-                    row_items.append(f"'{k}' => \"None\"")
-                elif v == 'null':
+                if v is None:
                     row_items.append(f"'{k}' => null")
+                elif isinstance(v, (int, float)):
+                    row_items.append(f"'{k}' => {v}")  # No quotes for numeric values
+                elif isinstance(v, dict):
+                    json_str = json.dumps(v, ensure_ascii=False).replace('"', '\\"')
+                    row_items.append(f"'{k}' => json_decode('{json_str}', true)")
                 elif isinstance(v, str):
+                    v = v.replace("'", "\\'")  # Escape single quotes
                     row_items.append(f"'{k}' => '{v}'")
                 else:
                     row_items.append(f"'{k}' => {v}")
