@@ -8,5 +8,7 @@ __all__ = [
     'parse_sql_content',
     'format_as_php_array',
     'generate_migration_content',
-    'type_mapping'
+    'type_mapping',
+    'parse_sql_file_for_migration',
+    'parse_column_definition',
 ]

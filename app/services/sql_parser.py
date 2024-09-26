@@ -54,3 +54,23 @@ def parse_sql_content(content: str) -> Tuple[Dict[str, List[Dict[str, Any]]], Di
             logger.warning(f"Table {table_name} exceeded MAX_INSERT_ROWS. Truncated to {settings.MAX_INSERT_ROWS} rows.")
 
     return result, total_rows
+
+def parse_sql_file_for_migration(content: str) -> List[Tuple[str, str, str]]:
+    create_table_pattern = r"CREATE TABLE `(\w+)` \(([\s\S]*?)\) ENGINE=(\w+).*?;"
+    return re.findall(create_table_pattern, content, re.DOTALL)
+
+def parse_column_definition(column_def: str) -> Dict[str, Any]:
+    column_pattern = r"`(\w+)`\s+([\w()]+)(?:\s+(\w+))?(?:\s+(\w+))?(?:\s+DEFAULT\s+(.*?))?(?:\s+COMMENT\s+'(.*?)')?,?"
+    match = re.match(column_pattern, column_def.strip())
+    
+    if match:
+        name, type, unsigned, nullable, default, comment = match.groups()
+        return {
+            'name': name,
+            'type': type,
+            'unsigned': unsigned == 'unsigned',
+            'nullable': nullable != 'NOT NULL',
+            'default': default,
+            'comment': comment
+        }
+    return None
