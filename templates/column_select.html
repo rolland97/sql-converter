@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Select Columns - SQL Converter</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <style>
+        .column-select {
+            margin: 20px 0;
+        }
+        .table-container {
+            margin-bottom: 20px;
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 5px;
+        }
+        .table-title {
+            margin-top: 0;
+            margin-bottom: 10px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #eee;
+        }
+        .column-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 10px;
+        }
+        .column-checkbox {
+            margin-right: 10px;
+        }
+        .action-buttons {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+        }
+        .select-all-btn, .deselect-all-btn {
+            background-color: #f1f1f1;
+            border: 1px solid #ccc;
+            padding: 5px 10px;
+            cursor: pointer;
+            font-size: 0.8em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Select Columns for PHP Array</h1>
+        <p>Choose which columns you want to include in the generated PHP array:</p>
+        
+        <form action="/convert/php" method="post" enctype="multipart/form-data">
+            <input type="hidden" name="temp_path" value="{{ temp_path }}">
+            <input type="hidden" name="temp_content_path" value="{{ temp_content_path }}">
+            <input type="hidden" name="filename" value="{{ filename }}">
+            
+            <div class="column-select">
+                {% for table, columns in table_columns.items() %}
+                <div class="table-container">
+                    <h3 class="table-title">Table: {{ table }}</h3>
+                    <div class="table-actions">
+                        <button type="button" class="select-all-btn" data-table="{{ table }}">Select All</button>
+                        <button type="button" class="deselect-all-btn" data-table="{{ table }}">Deselect All</button>
+                    </div>
+                    <div class="column-list">
+                        {% for column in columns %}
+                        <div>
+                            <label>
+                                <input type="checkbox" name="{{ table }}_{{ column }}" class="column-checkbox" data-table="{{ table }}" checked>
+                                {{ column }}
+                            </label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            
+            <div class="action-buttons">
+                <button type="button" id="select-all" class="button">Select All Columns</button>
+                <button type="button" id="deselect-all" class="button">Deselect All Columns</button>
+            </div>
+            
+            <input type="submit" value="Generate PHP Array">
+        </form>
+        
+        <div class="back-link">
+            <a href="/">← Back to Main Page</a>
+        </div>
+    </div>
+
+    <script>
+        // Table-specific select/deselect
+        document.querySelectorAll('.select-all-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const table = this.getAttribute('data-table');
+                document.querySelectorAll(`.column-checkbox[data-table="${table}"]`).forEach(checkbox => {
+                    checkbox.checked = true;
+                });
+            });
+        });
+        
+        document.querySelectorAll('.deselect-all-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const table = this.getAttribute('data-table');
+                document.querySelectorAll(`.column-checkbox[data-table="${table}"]`).forEach(checkbox => {
+                    checkbox.checked = false;
+                });
+            });
+        });
+        
+        // Global select/deselect
+        document.getElementById('select-all').addEventListener('click', function() {
+            document.querySelectorAll('.column-checkbox').forEach(checkbox => {
+                checkbox.checked = true;
+            });
+        });
+        
+        document.getElementById('deselect-all').addEventListener('click', function() {
+            document.querySelectorAll('.column-checkbox').forEach(checkbox => {
+                checkbox.checked = false;
+            });
+        });
+    </script>
+</body>
+</html>

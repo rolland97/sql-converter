@@ -1,5 +1,6 @@
 import re
-from fastapi import HTTPException
+from fastapi import HTTPException, Form
+from typing import List
 from utils.file_utils import create_temp_file, cleanup_temp_file
 from fastapi.responses import JSONResponse, HTMLResponse, FileResponse
 
@@ -9,10 +10,15 @@ def parse_sql_content(content):
     matches = re.findall(insert_pattern, content, re.DOTALL)
     
     result = {}
+    table_columns = {}  # Store columns for each table
+    
     for match in matches:
         table_name = match[0]
         columns = [col.strip('`') for col in match[1].split(',')]
         values_block = match[2]
+        
+        # Store columns for the table
+        table_columns[table_name] = columns
         
         if table_name not in result:
             result[table_name] = []
@@ -37,16 +43,24 @@ def parse_sql_content(content):
             row_dict = dict(zip(columns, processed_values))
             result[table_name].append(row_dict)
 
-    return result
+    return result, table_columns
 
-def format_as_php_array(data):
+def format_as_php_array(data, selected_columns=None):
     output = []
     for table, rows in data.items():
         output.append(f"${table} = [")
         for row in rows:
             row_str = "    ["
             row_items = []
-            for k, v in row.items():
+            
+            # If selected_columns is provided and contains entries for this table, use only those columns
+            if selected_columns and table in selected_columns:
+                columns_to_use = selected_columns[table]
+                filtered_row = {k: v for k, v in row.items() if k in columns_to_use}
+            else:
+                filtered_row = row
+                
+            for k, v in filtered_row.items():
                 if v == "None":
                     row_items.append(f"'{k}' => \"None\"")
                 elif v == 'null':
@@ -62,7 +76,8 @@ def format_as_php_array(data):
         output.append("")  # Add an empty line between tables
     return "\n".join(output)
 
-async def convert_sql_to_php_array(background_tasks, file):
+async def analyze_sql_file(file):
+    """Analyze SQL file and return table names and columns"""
     if not file.filename.endswith('.sql'):
         raise HTTPException(status_code=400, detail="Invalid file type. Please upload an SQL file.")
     
@@ -70,8 +85,21 @@ async def convert_sql_to_php_array(background_tasks, file):
     content = content.decode('utf-8')
     
     try:
-        result = parse_sql_content(content)
-        php_array = format_as_php_array(result)
+        _, table_columns = parse_sql_content(content)
+        return table_columns
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
+
+async def convert_sql_to_php_array(background_tasks, file, selected_columns=None):
+    if not file.filename.endswith('.sql'):
+        raise HTTPException(status_code=400, detail="Invalid file type. Please upload an SQL file.")
+    
+    content = await file.read()
+    content = content.decode('utf-8')
+    
+    try:
+        result, _ = parse_sql_content(content)
+        php_array = format_as_php_array(result, selected_columns)
         
         temp_path, output_filename = create_temp_file(file.filename, php_array, '.php')
         background_tasks.add_task(cleanup_temp_file, temp_path)
