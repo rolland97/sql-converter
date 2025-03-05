@@ -30,21 +30,37 @@ def parse_sql_content(content):
         if table_name not in result:
             result[table_name] = []
         
-        # Extract individual rows
-        row_pattern = r"\((.*?)\)"
+        # Extract individual rows with a more robust pattern
+        # This pattern supports nested parentheses and complex strings
+        row_pattern = r"\(((?:[^()]|\([^()]*\))*)\)"
         rows = re.findall(row_pattern, values_block)
         
         for row in rows:
-            values = re.findall(r'"([^"]*)"|\b(NULL)\b|(\d+)|\'([^\']*)\'', row)
+            # Improved value parsing
+            # Use a more robust regex pattern that can handle complex strings and special characters
+            values_pattern = r"'((?:[^'\\]|\\.)*)'|\"((?:[^\"\\]|\\.)*)\"|\b(NULL)\b|(-?\d+(?:\.\d+)?)"
+            matches = re.findall(values_pattern, row, re.IGNORECASE)
+            
             # Process values
             processed_values = []
-            for v in values:
-                if v[1] == 'NULL':
+            for match in matches:
+                single_quote_str, double_quote_str, null_val, num_val = match
+                
+                if null_val.upper() == 'NULL':
                     processed_values.append('null')  # PHP null
-                elif v[0] == '' and v[1] == '' and v[2] == '' and v[3] == '':
-                    processed_values.append("None")  # Python "None" for empty values
+                elif num_val:
+                    processed_values.append(num_val)  # Number
+                elif single_quote_str != '':
+                    processed_values.append(single_quote_str)  # String in single quotes
+                elif double_quote_str != '':
+                    processed_values.append(double_quote_str)  # String in double quotes
                 else:
-                    processed_values.append(v[0] or v[2] or v[3])  # Non-empty string or number
+                    processed_values.append("None")  # Fallback, shouldn't happen
+            
+            # Ensure the number of values matches the number of columns
+            if len(processed_values) < len(columns):
+                # If there are missing values, fill with nulls
+                processed_values.extend(['null'] * (len(columns) - len(processed_values)))
             
             # Create a dictionary for this row
             row_dict = dict(zip(columns, processed_values))
