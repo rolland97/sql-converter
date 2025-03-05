@@ -23,11 +23,23 @@
         }
         .column-list {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
             gap: 10px;
+        }
+        .column-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
         }
         .column-checkbox {
             margin-right: 10px;
+        }
+        .column-rename {
+            margin-left: 10px;
+            padding: 4px 8px;
+            width: 150px;
+            border: 1px solid #ddd;
+            border-radius: 3px;
         }
         .action-buttons {
             margin-top: 20px;
@@ -41,12 +53,39 @@
             cursor: pointer;
             font-size: 0.8em;
         }
+        .tooltip {
+            position: relative;
+            display: inline-block;
+            margin-left: 8px;
+            cursor: help;
+        }
+        .tooltip .tooltiptext {
+            visibility: hidden;
+            width: 200px;
+            background-color: #555;
+            color: #fff;
+            text-align: center;
+            border-radius: 6px;
+            padding: 5px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            margin-left: -100px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            font-size: 12px;
+        }
+        .tooltip:hover .tooltiptext {
+            visibility: visible;
+            opacity: 1;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Select Columns for PHP Array</h1>
-        <p>Choose which columns you want to include in the generated PHP array:</p>
+        <h1>Select and Rename Columns for PHP Array</h1>
+        <p>Choose which columns you want to include in the generated PHP array and optionally rename them:</p>
         
         <form action="/convert/php" method="post" enctype="multipart/form-data">
             <input type="hidden" name="temp_path" value="{{ temp_path }}">
@@ -63,11 +102,13 @@
                     </div>
                     <div class="column-list">
                         {% for column in columns %}
-                        <div>
-                            <label>
-                                <input type="checkbox" name="{{ table }}_{{ column }}" class="column-checkbox" data-table="{{ table }}" checked>
-                                {{ column }}
-                            </label>
+                        <div class="column-item">
+                            <input type="checkbox" id="{{ table }}_{{ column }}" name="{{ table }}_{{ column }}" class="column-checkbox" data-table="{{ table }}" checked>
+                            <label for="{{ table }}_{{ column }}">{{ column }}</label>
+                            <input type="text" name="{{ table }}_{{ column }}_rename" class="column-rename" placeholder="New name (optional)">
+                            <div class="tooltip">?
+                                <span class="tooltiptext">Leave empty to keep original name</span>
+                            </div>
                         </div>
                         {% endfor %}
                     </div>

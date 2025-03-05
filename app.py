@@ -63,6 +63,7 @@ async def php_converter(
             # Get selected columns from form data
             form_data = await request.form()
             selected_columns = {}
+            renamed_columns = {}
             
             # Check if temp files exist
             if not os.path.exists(temp_path) or not os.path.exists(temp_content_path):
@@ -79,16 +80,29 @@ async def php_converter(
             with open(temp_path, 'r') as f:
                 table_columns = json.load(f)
             
-            # Process selected columns from form data
+            # Process selected columns and renamed columns from form data
             for table, columns in table_columns.items():
                 selected_for_table = []
+                renamed_for_table = {}
+                
                 for column in columns:
                     checkbox_name = f"{table}_{column}"
-                    if checkbox_name in form_data and form_data[checkbox_name] == "on":
+                    rename_name = f"{table}_{column}_rename"
+                    
+                    # Check if the column is selected (checkbox is checked)
+                    # Form data will only contain the checkbox if it's checked
+                    if checkbox_name in form_data:
                         selected_for_table.append(column)
+                        
+                        # Check if the column is renamed
+                        if rename_name in form_data and form_data[rename_name].strip():
+                            renamed_for_table[column] = form_data[rename_name].strip()
                 
                 if selected_for_table:  # Only add if at least one column is selected
                     selected_columns[table] = selected_for_table
+                
+                if renamed_for_table:  # Only add if at least one column is renamed
+                    renamed_columns[table] = renamed_for_table
             
             # Create a synthetic UploadFile
             synthetic_file = UploadFile(
@@ -96,8 +110,8 @@ async def php_converter(
                 file=open(temp_content_path, 'rb')
             )
             
-            # Convert with selected columns
-            result = await convert_sql_to_php_array(background_tasks, synthetic_file, selected_columns)
+            # Convert with selected columns and renamed columns
+            result = await convert_sql_to_php_array(background_tasks, synthetic_file, selected_columns, renamed_columns)
             
             # Clean up temp files after processing is complete
             try:
