@@ -14,7 +14,14 @@ def parse_sql_content(content):
     
     for match in matches:
         table_name = match[0]
-        columns = [col.strip('`') for col in match[1].split(',')]
+        
+        # Clean column names - strip backticks and whitespace
+        columns = []
+        for col in match[1].split(','):
+            # Remove backticks and strip whitespace
+            clean_col = col.strip().strip('`')
+            columns.append(clean_col)
+            
         values_block = match[2]
         
         # Store columns for the table
@@ -45,18 +52,32 @@ def parse_sql_content(content):
 
     return result, table_columns
 
-def format_as_php_array(data, selected_columns=None):
+def format_as_php_array(data, selected_columns=None, renamed_columns=None):
     output = []
     for table, rows in data.items():
+        # Skip tables that aren't in selected_columns if we're filtering
+        if selected_columns is not None and table not in selected_columns:
+            continue
+            
         output.append(f"${table} = [")
         for row in rows:
             row_str = "    ["
             row_items = []
             
-            # If selected_columns is provided and contains entries for this table, use only those columns
+            # If selected_columns is provided, use only those columns
             if selected_columns and table in selected_columns:
-                columns_to_use = selected_columns[table]
-                filtered_row = {k: v for k, v in row.items() if k in columns_to_use}
+                # We'll build a filtered row with potentially renamed keys
+                filtered_row = {}
+                
+                for orig_key in selected_columns[table]:
+                    if orig_key in row:  # Ensure the key exists in the row
+                        # Check if this column should be renamed
+                        new_key = orig_key
+                        if renamed_columns and table in renamed_columns and orig_key in renamed_columns[table]:
+                            new_key = renamed_columns[table][orig_key]
+                        
+                        # Add to the filtered row with possibly renamed key
+                        filtered_row[new_key] = row[orig_key]
             else:
                 filtered_row = row
                 
@@ -90,7 +111,7 @@ async def analyze_sql_file(file):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
-async def convert_sql_to_php_array(background_tasks, file, selected_columns=None):
+async def convert_sql_to_php_array(background_tasks, file, selected_columns=None, renamed_columns=None):
     if not file.filename.endswith('.sql'):
         raise HTTPException(status_code=400, detail="Invalid file type. Please upload an SQL file.")
     
@@ -99,7 +120,7 @@ async def convert_sql_to_php_array(background_tasks, file, selected_columns=None
     
     try:
         result, _ = parse_sql_content(content)
-        php_array = format_as_php_array(result, selected_columns)
+        php_array = format_as_php_array(result, selected_columns, renamed_columns)
         
         temp_path, output_filename = create_temp_file(file.filename, php_array, '.php')
         background_tasks.add_task(cleanup_temp_file, temp_path)
