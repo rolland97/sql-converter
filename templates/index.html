@@ -49,40 +49,6 @@
         </div>
     </div>
 
-    <script>
-    // Tab functionality
-    function openTab(evt, tabName) {
-        var i, tabcontent, tablinks;
-        tabcontent = document.getElementsByClassName("tabcontent");
-        for (i = 0; i < tabcontent.length; i++) {
-            tabcontent[i].style.display = "none";
-        }
-        tablinks = document.getElementsByClassName("tablinks");
-        for (i = 0; i < tablinks.length; i++) {
-            tablinks[i].className = tablinks[i].className.replace(" active", "");
-        }
-        document.getElementById(tabName).style.display = "block";
-        evt.currentTarget.className += " active";
-    }
-
-    // Get the element with id="defaultOpen" and click on it
-    document.getElementById("defaultOpen").click();
-    
-    // Loading indicator functionality
-    document.addEventListener('DOMContentLoaded', function() {
-        const forms = document.querySelectorAll('form');
-        const loadingOverlay = document.getElementById('loading-overlay');
-        
-        forms.forEach(form => {
-            form.addEventListener('submit', function() {
-                // Make sure file is selected
-                const fileInput = this.querySelector('input[type="file"]');
-                if (fileInput && fileInput.files.length > 0) {
-                    loadingOverlay.classList.add('active');
-                }
-            });
-        });
-    });
-    </script>
+    <script src="/static/js/main.js"></script>
 </body>
 </html>

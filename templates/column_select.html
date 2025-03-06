@@ -20,7 +20,7 @@
         <h1>Select and Rename Columns for PHP Array</h1>
         <p>Choose which columns you want to include in the generated PHP array and optionally rename them:</p>
         
-        <form action="/convert/php" method="post" enctype="multipart/form-data">
+        <form action="/convert/php" method="post" enctype="multipart/form-data" id="columnForm">
             <input type="hidden" name="temp_path" value="{{ temp_path }}">
             <input type="hidden" name="temp_content_path" value="{{ temp_content_path }}">
             <input type="hidden" name="filename" value="{{ filename }}">
@@ -54,7 +54,7 @@
                 <button type="button" id="deselect-all" class="button">Deselect All Columns</button>
             </div>
             
-            <input type="submit" value="Generate PHP Array">
+            <input type="submit" value="Generate PHP Array" id="submitBtn">
         </form>
         
         <div class="back-link">
@@ -62,51 +62,6 @@
         </div>
     </div>
 
-    <script>
-        // Table-specific select/deselect
-        document.querySelectorAll('.select-all-btn').forEach(btn => {
-            btn.addEventListener('click', function() {
-                const table = this.getAttribute('data-table');
-                document.querySelectorAll(`.column-checkbox[data-table="${table}"]`).forEach(checkbox => {
-                    checkbox.checked = true;
-                });
-            });
-        });
-        
-        document.querySelectorAll('.deselect-all-btn').forEach(btn => {
-            btn.addEventListener('click', function() {
-                const table = this.getAttribute('data-table');
-                document.querySelectorAll(`.column-checkbox[data-table="${table}"]`).forEach(checkbox => {
-                    checkbox.checked = false;
-                });
-            });
-        });
-        
-        // Global select/deselect
-        document.getElementById('select-all').addEventListener('click', function() {
-            document.querySelectorAll('.column-checkbox').forEach(checkbox => {
-                checkbox.checked = true;
-            });
-        });
-        
-        document.getElementById('deselect-all').addEventListener('click', function() {
-            document.querySelectorAll('.column-checkbox').forEach(checkbox => {
-                checkbox.checked = false;
-            });
-        });
-        
-        // Form submission loading
-        document.addEventListener('DOMContentLoaded', function() {
-            const form = document.querySelector('form');
-            const loadingOverlay = document.getElementById('loading-overlay');
-            
-            if (form) {
-                form.addEventListener('submit', function() {
-                    // Show loading overlay when form is submitted
-                    loadingOverlay.classList.add('active');
-                });
-            }
-        });
-    </script>
+    <script src="/static/js/main.js"></script>
 </body>
 </html>
