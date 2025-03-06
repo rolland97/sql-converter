@@ -149,20 +149,30 @@ function initializeDragAndDrop() {
         const fileInput = upload.querySelector('input[type="file"]');
         if (!fileInput) return;
         
-        // Create drop zone element
+        // Create drop zone element with clear separation of elements
         const dropZone = document.createElement('div');
         dropZone.className = 'drop-zone';
-        dropZone.innerHTML = `
-            <div class="drop-zone-prompt">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                    <polyline points="17 8 12 3 7 8"></polyline>
-                    <line x1="12" y1="3" x2="12" y2="15"></line>
-                </svg>
-                <span>Drag & drop your SQL file here or click to browse</span>
-            </div>
-            <div class="drop-zone-thumb" hidden></div>
+        
+        // Create the prompt element (only shown when no file is selected)
+        const promptElement = document.createElement('div');
+        promptElement.className = 'drop-zone-prompt';
+        promptElement.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+            <span>Drag & drop your SQL file here or click to browse</span>
         `;
+        
+        // Create the thumbnail element (only shown when a file is selected)
+        const thumbElement = document.createElement('div');
+        thumbElement.className = 'drop-zone-thumb';
+        thumbElement.hidden = true; // Initially hidden
+        
+        // Add both elements to the drop zone
+        dropZone.appendChild(promptElement);
+        dropZone.appendChild(thumbElement);
         
         // Insert drop zone after the label
         const label = upload.querySelector('label');
@@ -182,7 +192,9 @@ function initializeDragAndDrop() {
         
         // Change handler for the file input
         fileInput.addEventListener('change', function() {
-            updateThumbnail(dropZone, fileInput.files[0]);
+            if (fileInput.files.length) {
+                updateThumbnail(dropZone, fileInput.files[0]);
+            }
         });
         
         // Drag and drop handlers
@@ -215,13 +227,16 @@ function initializeDragAndDrop() {
  * Update the drop zone thumbnail with file information
  */
 function updateThumbnail(dropZone, file) {
-    // Remove any previous thumbnail
+    // Get elements
     let thumbnailElement = dropZone.querySelector('.drop-zone-thumb');
+    let promptElement = dropZone.querySelector('.drop-zone-prompt');
     
-    // First time - remove prompt, show thumbnail
+    // First time - fully hide prompt, show thumbnail
     if (thumbnailElement.hasAttribute('hidden')) {
         thumbnailElement.removeAttribute('hidden');
-        dropZone.querySelector('.drop-zone-prompt').setAttribute('hidden', true);
+        
+        // Completely hide the prompt
+        promptElement.style.display = 'none';
     }
     
     // Check if it's a SQL file
@@ -239,7 +254,7 @@ function updateThumbnail(dropZone, file) {
         return;
     }
     
-    // Set the filename as caption
+    // Set the filename as caption - NO INSTRUCTION TEXT HERE
     thumbnailElement.innerHTML = `
         <div class="file-info">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -249,28 +264,13 @@ function updateThumbnail(dropZone, file) {
                 <line x1="16" y1="17" x2="8" y2="17"></line>
                 <polyline points="10 9 9 9 8 9"></polyline>
             </svg>
-            <span>${file.name}</span>
+            <span class="filename">${file.name}</span>
             <span class="file-size">${formatFileSize(file.size)}</span>
         </div>
     `;
     
-    // Show file preview (if it's a small SQL file)
-    if (file.size < 100000) { // Less than 100KB
-        const reader = new FileReader();
-        
-        reader.onload = function() {
-            const preview = document.createElement('div');
-            preview.className = 'file-preview';
-            preview.innerHTML = `
-                <div class="preview-header">File Preview:</div>
-                <pre>${reader.result.slice(0, 500)}${reader.result.length > 500 ? '...' : ''}</pre>
-            `;
-            
-            thumbnailElement.appendChild(preview);
-        };
-        
-        reader.readAsText(file);
-    }
+    // We don't need to show the preview when a file is already selected
+    // This keeps the display clean and focused on the selected file
 }
 
 /**
