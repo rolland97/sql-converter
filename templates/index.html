@@ -4,9 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SQL Converter</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
+    <!-- Loading overlay -->
+    <div class="loading-overlay" id="loading-overlay">
+        <div class="loading-container">
+            <div class="spinner"></div>
+            <div class="loading-text">Processing your request...</div>
+        </div>
+    </div>
+
     <div class="container">
         <h1>SQL Converter</h1>
         <div class="tab">
@@ -41,6 +50,7 @@
     </div>
 
     <script>
+    // Tab functionality
     function openTab(evt, tabName) {
         var i, tabcontent, tablinks;
         tabcontent = document.getElementsByClassName("tabcontent");
@@ -57,6 +67,22 @@
 
     // Get the element with id="defaultOpen" and click on it
     document.getElementById("defaultOpen").click();
+    
+    // Loading indicator functionality
+    document.addEventListener('DOMContentLoaded', function() {
+        const forms = document.querySelectorAll('form');
+        const loadingOverlay = document.getElementById('loading-overlay');
+        
+        forms.forEach(form => {
+            form.addEventListener('submit', function() {
+                // Make sure file is selected
+                const fileInput = this.querySelector('input[type="file"]');
+                if (fileInput && fileInput.files.length > 0) {
+                    loadingOverlay.classList.add('active');
+                }
+            });
+        });
+    });
     </script>
 </body>
 </html>

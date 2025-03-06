@@ -4,85 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Select Columns - SQL Converter</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/styles.css">
-    <style>
-        .column-select {
-            margin: 20px 0;
-        }
-        .table-container {
-            margin-bottom: 20px;
-            border: 1px solid #ddd;
-            padding: 15px;
-            border-radius: 5px;
-        }
-        .table-title {
-            margin-top: 0;
-            margin-bottom: 10px;
-            padding-bottom: 5px;
-            border-bottom: 1px solid #eee;
-        }
-        .column-list {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-            gap: 10px;
-        }
-        .column-item {
-            display: flex;
-            align-items: center;
-            margin-bottom: 8px;
-        }
-        .column-checkbox {
-            margin-right: 10px;
-        }
-        .column-rename {
-            margin-left: 10px;
-            padding: 4px 8px;
-            width: 150px;
-            border: 1px solid #ddd;
-            border-radius: 3px;
-        }
-        .action-buttons {
-            margin-top: 20px;
-            display: flex;
-            gap: 10px;
-        }
-        .select-all-btn, .deselect-all-btn {
-            background-color: #f1f1f1;
-            border: 1px solid #ccc;
-            padding: 5px 10px;
-            cursor: pointer;
-            font-size: 0.8em;
-        }
-        .tooltip {
-            position: relative;
-            display: inline-block;
-            margin-left: 8px;
-            cursor: help;
-        }
-        .tooltip .tooltiptext {
-            visibility: hidden;
-            width: 200px;
-            background-color: #555;
-            color: #fff;
-            text-align: center;
-            border-radius: 6px;
-            padding: 5px;
-            position: absolute;
-            z-index: 1;
-            bottom: 125%;
-            left: 50%;
-            margin-left: -100px;
-            opacity: 0;
-            transition: opacity 0.3s;
-            font-size: 12px;
-        }
-        .tooltip:hover .tooltiptext {
-            visibility: visible;
-            opacity: 1;
-        }
-    </style>
 </head>
 <body>
+    <!-- Loading overlay -->
+    <div class="loading-overlay" id="loading-overlay">
+        <div class="loading-container">
+            <div class="spinner"></div>
+            <div class="loading-text">Generating PHP Array...</div>
+        </div>
+    </div>
+    
     <div class="container">
         <h1>Select and Rename Columns for PHP Array</h1>
         <p>Choose which columns you want to include in the generated PHP array and optionally rename them:</p>
@@ -104,7 +37,7 @@
                         {% for column in columns %}
                         <div class="column-item">
                             <input type="checkbox" id="{{ table }}_{{ column }}" name="{{ table }}_{{ column }}" class="column-checkbox" data-table="{{ table }}" checked>
-                            <label for="{{ table }}_{{ column }}">{{ column }}</label>
+                            <label for="{{ table }}_{{ column }}" title="{{ column }}">{{ column }}</label>
                             <input type="text" name="{{ table }}_{{ column }}_rename" class="column-rename" placeholder="New name (optional)">
                             <div class="tooltip">?
                                 <span class="tooltiptext">Leave empty to keep original name</span>
@@ -160,6 +93,19 @@
             document.querySelectorAll('.column-checkbox').forEach(checkbox => {
                 checkbox.checked = false;
             });
+        });
+        
+        // Form submission loading
+        document.addEventListener('DOMContentLoaded', function() {
+            const form = document.querySelector('form');
+            const loadingOverlay = document.getElementById('loading-overlay');
+            
+            if (form) {
+                form.addEventListener('submit', function() {
+                    // Show loading overlay when form is submitted
+                    loadingOverlay.classList.add('active');
+                });
+            }
         });
     </script>
 </body>
