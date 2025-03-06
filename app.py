@@ -1,12 +1,11 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks, Form, Request
-from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse
+from fastapi import FastAPI, File, UploadFile, BackgroundTasks, Form, Request
+from fastapi.responses import HTMLResponse
 from starlette.requests import Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from converters.php_converter import convert_sql_to_php_array, analyze_sql_file
 from converters.laravel_converter import convert_sql_to_laravel_migration
 import json
-from typing import List, Dict
 import tempfile
 import os
 

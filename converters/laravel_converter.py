@@ -3,7 +3,7 @@ import io
 import zipfile
 from fastapi import HTTPException
 from utils.file_utils import create_temp_zip, cleanup_temp_file
-from fastapi.responses import JSONResponse, HTMLResponse, FileResponse
+from fastapi.responses import FileResponse
 
 def parse_sql_file_for_migration(content):
     # Extract CREATE TABLE statements

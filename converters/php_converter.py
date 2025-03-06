@@ -1,8 +1,7 @@
 import re
-from fastapi import HTTPException, Form
-from typing import List
+from fastapi import HTTPException
 from utils.file_utils import create_temp_file, cleanup_temp_file
-from fastapi.responses import JSONResponse, HTMLResponse, FileResponse
+from fastapi.responses import FileResponse
 
 def parse_sql_content(content):
     # Extract INSERT statements
