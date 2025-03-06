@@ -30,7 +30,7 @@ function initializeIndexPage() {
     document.getElementById('defaultOpen').click();
     
     // Handle form submissions on index page
-    const forms = document.querySelectorAll('form');
+    const forms = document.querySelectorAll('form:not(#directConvertForm)');
     const loadingOverlay = document.getElementById('loading-overlay');
     
     forms.forEach(form => {
@@ -47,6 +47,80 @@ function initializeIndexPage() {
             }
         });
     });
+    
+    // Handle direct convert form with AJAX
+    const directConvertForm = document.getElementById('directConvertForm');
+    const directConvertBtn = document.getElementById('directConvertBtn');
+    
+    if (directConvertForm && directConvertBtn) {
+        directConvertBtn.addEventListener('click', function(e) {
+            e.preventDefault(); // Prevent default form submission
+            
+            // Make sure file is selected
+            const fileInput = directConvertForm.querySelector('input[type="file"]');
+            if (fileInput && fileInput.files.length > 0) {
+                // Show loading
+                loadingOverlay.classList.add('active');
+                
+                // Submit the form
+                const formData = new FormData(directConvertForm);
+                
+                // Create an XHR request for the download
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', directConvertForm.action, true);
+                xhr.responseType = 'blob'; // Important for file downloads
+                
+                // When the request completes
+                xhr.onload = function() {
+                    // Hide loading overlay
+                    loadingOverlay.classList.remove('active');
+                    
+                    if (xhr.status === 200) {
+                        // Create a download link
+                        const blob = xhr.response;
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        
+                        // Try to get filename from response headers
+                        let filename = '';
+                        const disposition = xhr.getResponseHeader('Content-Disposition');
+                        
+                        if (disposition && disposition.indexOf('attachment') !== -1) {
+                            const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+                            const matches = filenameRegex.exec(disposition);
+                            if (matches != null && matches[1]) {
+                                filename = matches[1].replace(/['"]/g, '');
+                            }
+                        }
+                        
+                        // Use a default filename if not found in headers
+                        if (!filename) {
+                            filename = "php_array.php";
+                        }
+                        
+                        a.href = url;
+                        a.download = filename;
+                        document.body.appendChild(a);
+                        a.click();
+                        window.URL.revokeObjectURL(url);
+                        document.body.removeChild(a);
+                    } else {
+                        // Handle error
+                        alert('An error occurred while generating the file.');
+                    }
+                };
+                
+                // Handle network errors
+                xhr.onerror = function() {
+                    loadingOverlay.classList.remove('active');
+                    alert('Network error occurred while trying to generate the file.');
+                };
+                
+                // Send the form data
+                xhr.send(formData);
+            }
+        });
+    }
     
     // Handle back button navigation
     window.addEventListener('pageshow', function(event) {
