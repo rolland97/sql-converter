@@ -1,12 +1,12 @@
 """
-Module for converting SQL INSERT statements to PHP arrays.
+Module for converting SQL INSERT statements to Excel files.
 """
 import re
-from fastapi import HTTPException
-from utils.file_utils import create_temp_file, cleanup_temp_file
-from fastapi.responses import FileResponse
-from exceptions import SQLParsingError, ValidationError, ConversionError, FileError
+import io
 import logging
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from exceptions import SQLParsingError, ValidationError, ConversionError, FileError
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -15,25 +15,7 @@ def get_line_number(content, position):
     """Helper function to get line number from string position."""
     return content[:position].count('\n') + 1
 
-def process_sql_escapes(s):
-    """Process SQL escape sequences in a string."""
-    # Replace common SQL escape sequences
-    replacements = {
-        "\\'": "'",  # Single quote
-        '\\"': '"',  # Double quote
-        '\\\\': '\\', # Backslash
-        '\\n': '\n',  # Newline
-        '\\r': '\r',  # Carriage return
-        '\\t': '\t',  # Tab
-    }
-    
-    result = s
-    for escape_seq, replacement in replacements.items():
-        result = result.replace(escape_seq, replacement)
-    
-    return result
-
-def parse_sql_content(content):
+def parse_sql_insert_statements(content):
     """
     Parse SQL content to extract INSERT statements and convert to structured data.
     
@@ -41,9 +23,8 @@ def parse_sql_content(content):
         content (str): SQL content with INSERT statements
         
     Returns:
-        tuple: (data_dict, table_columns) where data_dict is a dictionary of tables and their rows,
-               and table_columns is a dictionary of tables and their column names
-               
+        dict: Dictionary with table names as keys and lists of row dictionaries as values
+        
     Raises:
         SQLParsingError: If SQL parsing fails
     """
@@ -78,7 +59,6 @@ def parse_sql_content(content):
         raise SQLParsingError(f"Failed to parse SQL: {str(e)}")
     
     result = {}
-    table_columns = {}  # Store columns for each table
     
     for match in matches:
         table_name = match[0]
@@ -92,11 +72,11 @@ def parse_sql_content(content):
             
         values_block = match[2]
         
-        # Store columns for the table
-        table_columns[table_name] = columns
-        
         if table_name not in result:
-            result[table_name] = []
+            result[table_name] = {
+                'columns': columns,
+                'rows': []
+            }
         
         try:
             # Extract individual rows with a more robust pattern
@@ -127,32 +107,32 @@ def parse_sql_content(content):
                     single_quote_str, double_quote_str, null_val, num_val = match
                     
                     if null_val.upper() == 'NULL':
-                        processed_values.append('null')  # PHP null
+                        processed_values.append(None)  # None for NULL in Excel
                     elif num_val:
-                        processed_values.append(num_val)  # Number
+                        # Try to convert to appropriate numeric type
+                        if '.' in num_val:
+                            processed_values.append(float(num_val))
+                        else:
+                            processed_values.append(int(num_val))
                     elif single_quote_str != '':
-                        processed_str = process_sql_escapes(single_quote_str)
-                        processed_values.append(processed_str)  # String in single quotes
+                        # Process SQL escape sequences
+                        processed_values.append(process_sql_escapes(single_quote_str))
                     elif double_quote_str != '':
-                        processed_str = process_sql_escapes(double_quote_str)
-                        processed_values.append(processed_str)  # String in double quotes
+                        # Process SQL escape sequences
+                        processed_values.append(process_sql_escapes(double_quote_str))
                     else:
-                        processed_values.append("None")  # Fallback, shouldn't happen
+                        processed_values.append(None)  # Fallback, shouldn't happen
                 
                 # Ensure the number of values matches the number of columns
                 if len(processed_values) < len(columns):
-                    # If there are missing values, fill with nulls
+                    # If there are missing values, fill with None
                     logger.warning(
                         f"Row {row_idx+1} in table {table_name} has fewer values than columns. "
-                        f"Expected {len(columns)}, got {len(processed_values)}. Filling with nulls."
+                        f"Expected {len(columns)}, got {len(processed_values)}. Filling with None."
                     )
-                    processed_values.extend(['null'] * (len(columns) - len(processed_values)))
+                    processed_values.extend([None] * (len(columns) - len(processed_values)))
                 
                 if len(processed_values) > len(columns):
-                    match_position = content.find(row)
-                    line_number = get_line_number(content, match_position)
-                    snippet = row[:50] + "..." if len(row) > 50 else row
-                    
                     logger.warning(
                         f"Row {row_idx+1} in table {table_name} has more values than columns. "
                         f"Expected {len(columns)}, got {len(processed_values)}. Extra values will be ignored."
@@ -160,9 +140,8 @@ def parse_sql_content(content):
                     # Truncate to match column count
                     processed_values = processed_values[:len(columns)]
                 
-                # Create a dictionary for this row
-                row_dict = dict(zip(columns, processed_values))
-                result[table_name].append(row_dict)
+                # Add the processed row
+                result[table_name]['rows'].append(processed_values)
                 
         except Exception as e:
             if isinstance(e, SQLParsingError):
@@ -178,72 +157,140 @@ def parse_sql_content(content):
     if not result:
         raise ValidationError("No valid data found in the SQL file.")
 
-    return result, table_columns
+    return result
 
-def format_as_php_array(data, selected_columns=None, renamed_columns=None):
+def process_sql_escapes(s):
+    """Process SQL escape sequences in a string."""
+    # Replace common SQL escape sequences
+    replacements = {
+        "\\'": "'",  # Single quote
+        '\\"': '"',  # Double quote
+        '\\\\': '\\', # Backslash
+        '\\n': '\n',  # Newline
+        '\\r': '\r',  # Carriage return
+        '\\t': '\t',  # Tab
+    }
+    
+    result = s
+    for escape_seq, replacement in replacements.items():
+        result = result.replace(escape_seq, replacement)
+    
+    return result
+
+def create_excel_workbook(parsed_data, table_filters=None):
     """
-    Format the parsed data as PHP arrays.
+    Create an Excel workbook from parsed SQL data.
     
     Args:
-        data (dict): Dictionary of tables and their rows
-        selected_columns (dict, optional): Dictionary of tables and columns to include
-        renamed_columns (dict, optional): Dictionary of tables, columns and their new names
+        parsed_data (dict): Dictionary with table data
+        table_filters (dict, optional): Dictionary of tables and column filters
         
     Returns:
-        str: PHP code representing the data as arrays
+        openpyxl.Workbook: Excel workbook object
+        
+    Raises:
+        ConversionError: If Excel creation fails
     """
     try:
-        output = ["<?php", ""]  # Start with PHP tag and empty line
-        for table, rows in data.items():
-            # Skip tables that aren't in selected_columns if we're filtering
-            if selected_columns is not None and table not in selected_columns:
+        # Create a new workbook
+        workbook = openpyxl.Workbook()
+        
+        # Remove default sheet
+        default_sheet = workbook.active
+        workbook.remove(default_sheet)
+        
+        # Define styles
+        header_font = Font(bold=True, color="FFFFFF")
+        header_fill = PatternFill(start_color="3F51B5", end_color="3F51B5", fill_type="solid")
+        header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        
+        # Define borders
+        thin_border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+        
+        # Create sheets for each table
+        for table_name, table_data in parsed_data.items():
+            # Skip tables not in the filter if filter is provided
+            if table_filters and table_name not in table_filters:
                 continue
                 
-            output.append(f"${table} = [")
-            for row in rows:
-                row_str = "    ["
-                row_items = []
+            # Create a sheet for this table (limit to 31 chars, Excel sheet name limit)
+            sheet = workbook.create_sheet(title=table_name[:31])
+            
+            # Get columns and rows
+            columns = table_data['columns']
+            rows = table_data['rows']
+            
+            # Apply column filtering if specified
+            if table_filters and table_name in table_filters:
+                # Get the indices of columns to include
+                included_columns = table_filters[table_name]
                 
-                # If selected_columns is provided, use only those columns
-                if selected_columns and table in selected_columns:
-                    # We'll build a filtered row with potentially renamed keys
-                    filtered_row = {}
+                # Filter columns
+                column_indices = [i for i, col in enumerate(columns) if col in included_columns]
+                
+                # Create new filtered columns list
+                filtered_columns = [columns[i] for i in column_indices]
+                
+                # Create new filtered rows
+                filtered_rows = []
+                for row in rows:
+                    filtered_row = [row[i] for i in column_indices]
+                    filtered_rows.append(filtered_row)
                     
-                    for orig_key in selected_columns[table]:
-                        if orig_key in row:  # Ensure the key exists in the row
-                            # Check if this column should be renamed
-                            new_key = orig_key
-                            if renamed_columns and table in renamed_columns and orig_key in renamed_columns[table]:
-                                new_key = renamed_columns[table][orig_key]
-                            
-                            # Add to the filtered row with possibly renamed key
-                            filtered_row[new_key] = row[orig_key]
-                else:
-                    filtered_row = row
+                # Replace original columns and rows
+                columns = filtered_columns
+                rows = filtered_rows
+            
+            # Add header row
+            for col_idx, column in enumerate(columns, start=1):
+                cell = sheet.cell(row=1, column=col_idx, value=column)
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.alignment = header_alignment
+                cell.border = thin_border
+                
+                # Auto-size columns by setting an appropriate width
+                sheet.column_dimensions[openpyxl.utils.get_column_letter(col_idx)].width = max(len(column) + 2, 12)
+            
+            # Add data rows
+            for row_idx, row_data in enumerate(rows, start=2):
+                for col_idx, cell_value in enumerate(row_data, start=1):
+                    cell = sheet.cell(row=row_idx, column=col_idx, value=cell_value)
+                    cell.border = thin_border
                     
-                for k, v in filtered_row.items():
-                    if v == "None":
-                        row_items.append(f"'{k}' => \"None\"")
-                    elif v == 'null':
-                        row_items.append(f"'{k}' => null")
-                    elif isinstance(v, str):
-                        # Escape single quotes in string values
-                        escaped_v = v.replace("'", "\\'")
-                        row_items.append(f"'{k}' => '{escaped_v}'")
-                    else:
-                        row_items.append(f"'{k}' => {v}")
-                row_str += ", ".join(row_items)
-                row_str += "],"
-                output.append(row_str)
-            output.append("];")
-            output.append("")  # Add an empty line between tables
+                    # If it's a long string, enable text wrapping
+                    if isinstance(cell_value, str) and len(cell_value) > 50:
+                        cell.alignment = Alignment(wrap_text=True)
+            
+            # Freeze the header row
+            sheet.freeze_panes = "A2"
+            
+            # Apply auto-filter to the header row
+            sheet.auto_filter.ref = sheet.dimensions
         
-        return "\n".join(output)
+        return workbook
     except Exception as e:
-        raise ConversionError(f"Failed to format PHP array: {str(e)}", converter_type="PHP")
+        logger.error(f"Error creating Excel workbook: {str(e)}", exc_info=True)
+        raise ConversionError(f"Failed to create Excel file: {str(e)}", converter_type="Excel")
 
 async def validate_sql_file(file):
-    """Validate that the uploaded file is a valid SQL file."""
+    """
+    Validate that the uploaded file is a valid SQL file.
+    
+    Args:
+        file: UploadFile object
+        
+    Returns:
+        bool: True if file is valid
+        
+    Raises:
+        ValidationError: If file validation fails
+    """
     if not file.filename.endswith('.sql'):
         raise ValidationError("Invalid file type. Please upload an SQL file with .sql extension.")
     
@@ -267,9 +314,9 @@ async def validate_sql_file(file):
             raise
         raise ValidationError(f"Error validating file: {str(e)}")
 
-async def analyze_sql_file(file):
+async def analyze_sql_file_for_excel(file):
     """
-    Analyze SQL file and return table names and columns.
+    Analyze SQL file and return table names and columns for Excel export.
     
     Args:
         file: UploadFile object
@@ -287,7 +334,13 @@ async def analyze_sql_file(file):
         content = await file.read()
         content = content.decode('utf-8')
         
-        _, table_columns = parse_sql_content(content)
+        parsed_data = parse_sql_insert_statements(content)
+        
+        # Create dictionary of tables and columns
+        table_columns = {}
+        for table_name, table_data in parsed_data.items():
+            table_columns[table_name] = table_data['columns']
+            
         return table_columns
     except UnicodeDecodeError:
         raise ValidationError("The SQL file contains invalid characters. Please ensure it's a valid UTF-8 encoded file.")
@@ -298,18 +351,17 @@ async def analyze_sql_file(file):
         logger.error(f"Unexpected error analyzing SQL file: {str(e)}", exc_info=True)
         raise SQLParsingError(f"An error occurred while analyzing the SQL file: {str(e)}")
 
-async def convert_sql_to_php_array(background_tasks, file, selected_columns=None, renamed_columns=None):
+async def convert_sql_to_excel(background_tasks, file, table_filters=None):
     """
-    Convert SQL INSERT statements to PHP arrays.
+    Convert SQL INSERT statements to Excel workbook.
     
     Args:
         background_tasks: FastAPI BackgroundTasks object
         file: UploadFile object
-        selected_columns (dict, optional): Dictionary of tables and columns to include
-        renamed_columns (dict, optional): Dictionary of tables, columns and their new names
+        table_filters (dict, optional): Dictionary of tables and column filters
         
     Returns:
-        FileResponse: PHP file to download
+        StreamingResponse: Excel file to download
         
     Raises:
         ValidationError: If file validation fails
@@ -317,38 +369,37 @@ async def convert_sql_to_php_array(background_tasks, file, selected_columns=None
         ConversionError: If conversion fails
         FileError: If file operations fail
     """
-    # Only validate if it's a direct file upload (not from column select)
-    if hasattr(file, 'filename') and file.filename:
-        await validate_sql_file(file)
+    # Validate the file
+    await validate_sql_file(file)
     
     try:
         content = await file.read()
         content = content.decode('utf-8')
         
         # Log parsing start
-        logger.info(f"Starting SQL parsing for file: {getattr(file, 'filename', 'unknown')}")
+        logger.info(f"Starting SQL parsing for Excel conversion: {file.filename}")
         
         # Parse SQL content
-        result, _ = parse_sql_content(content)
+        parsed_data = parse_sql_insert_statements(content)
         
-        # Format as PHP array
-        php_array = format_as_php_array(result, selected_columns, renamed_columns)
+        # Create Excel workbook
+        workbook = create_excel_workbook(parsed_data, table_filters)
         
-        # Create temporary file
-        try:
-            temp_path, output_filename = create_temp_file(
-                getattr(file, 'filename', 'sql_data'), 
-                php_array, 
-                '.php'
-            )
-            background_tasks.add_task(cleanup_temp_file, temp_path)
-        except Exception as e:
-            raise FileError(f"Failed to create output file: {str(e)}", operation="File creation")
-
-        return FileResponse(
-            path=temp_path, 
-            filename=output_filename, 
-            media_type='application/php'
+        # Save workbook to memory
+        output = io.BytesIO()
+        workbook.save(output)
+        output.seek(0)
+        
+        # Get base filename without extension
+        base_filename = file.filename.rsplit('.', 1)[0]
+        output_filename = f"{base_filename}_excel.xlsx"
+        
+        # Return streaming response
+        from fastapi.responses import StreamingResponse
+        return StreamingResponse(
+            output,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename={output_filename}"}
         )
     except UnicodeDecodeError:
         raise ValidationError("The SQL file contains invalid characters. Please ensure it's a valid UTF-8 encoded file.")
@@ -356,5 +407,5 @@ async def convert_sql_to_php_array(background_tasks, file, selected_columns=None
         if isinstance(e, (ValidationError, SQLParsingError, ConversionError, FileError)):
             raise
         # Log the unexpected error
-        logger.error(f"Unexpected error converting SQL to PHP: {str(e)}", exc_info=True)
-        raise ConversionError(f"An error occurred during conversion: {str(e)}", converter_type="PHP")
+        logger.error(f"Unexpected error converting SQL to Excel: {str(e)}", exc_info=True)
+        raise ConversionError(f"An error occurred during conversion: {str(e)}", converter_type="Excel")

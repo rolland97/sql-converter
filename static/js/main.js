@@ -48,6 +48,9 @@ function initializeIndexPage() {
         });
     });
     
+    // Initialize drag and drop functionality
+    initializeDragAndDrop();
+    
     // Handle direct convert form with AJAX
     const directConvertForm = document.getElementById('directConvertForm');
     const directConvertBtn = document.getElementById('directConvertBtn');
@@ -118,6 +121,9 @@ function initializeIndexPage() {
                 
                 // Send the form data
                 xhr.send(formData);
+            } else {
+                // Show alert if no file selected
+                alert('Please select a SQL file before converting.');
             }
         });
     }
@@ -130,6 +136,157 @@ function initializeIndexPage() {
             loadingOverlay.classList.remove('active');
         }
     });
+}
+
+/**
+ * Initialize drag and drop functionality for file uploads
+ */
+function initializeDragAndDrop() {
+    // Find all file upload areas
+    const fileUploads = document.querySelectorAll('.file-upload');
+    
+    fileUploads.forEach(upload => {
+        const fileInput = upload.querySelector('input[type="file"]');
+        if (!fileInput) return;
+        
+        // Create drop zone element with clear separation of elements
+        const dropZone = document.createElement('div');
+        dropZone.className = 'drop-zone';
+        
+        // Create the prompt element (only shown when no file is selected)
+        const promptElement = document.createElement('div');
+        promptElement.className = 'drop-zone-prompt';
+        promptElement.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+            <span>Drag & drop your SQL file here or click to browse</span>
+        `;
+        
+        // Create the thumbnail element (only shown when a file is selected)
+        const thumbElement = document.createElement('div');
+        thumbElement.className = 'drop-zone-thumb';
+        thumbElement.hidden = true; // Initially hidden
+        
+        // Add both elements to the drop zone
+        dropZone.appendChild(promptElement);
+        dropZone.appendChild(thumbElement);
+        
+        // Insert drop zone after the label
+        const label = upload.querySelector('label');
+        if (label && label.nextSibling) {
+            upload.insertBefore(dropZone, label.nextSibling);
+        } else {
+            upload.appendChild(dropZone);
+        }
+        
+        // Hide the original file input
+        fileInput.style.display = 'none';
+        
+        // Click handler for the drop zone
+        dropZone.addEventListener('click', function() {
+            fileInput.click();
+        });
+        
+        // Change handler for the file input
+        fileInput.addEventListener('change', function() {
+            if (fileInput.files.length) {
+                updateThumbnail(dropZone, fileInput.files[0]);
+            }
+        });
+        
+        // Drag and drop handlers
+        dropZone.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            dropZone.classList.add('drop-zone-over');
+        });
+        
+        ['dragleave', 'dragend'].forEach(type => {
+            dropZone.addEventListener(type, function() {
+                dropZone.classList.remove('drop-zone-over');
+            });
+        });
+        
+        dropZone.addEventListener('drop', function(e) {
+            e.preventDefault();
+            
+            if (e.dataTransfer.files.length) {
+                // Set the file to the file input
+                fileInput.files = e.dataTransfer.files;
+                updateThumbnail(dropZone, e.dataTransfer.files[0]);
+            }
+            
+            dropZone.classList.remove('drop-zone-over');
+        });
+    });
+}
+
+/**
+ * Update the drop zone thumbnail with file information
+ */
+function updateThumbnail(dropZone, file) {
+    // Get elements
+    let thumbnailElement = dropZone.querySelector('.drop-zone-thumb');
+    let promptElement = dropZone.querySelector('.drop-zone-prompt');
+    
+    // First time - fully hide prompt, show thumbnail
+    if (thumbnailElement.hasAttribute('hidden')) {
+        thumbnailElement.removeAttribute('hidden');
+        
+        // Completely hide the prompt
+        promptElement.style.display = 'none';
+    }
+    
+    // Check if it's a SQL file
+    if (!file.name.toLowerCase().endsWith('.sql')) {
+        thumbnailElement.innerHTML = `
+            <div class="file-error">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+                <span>Invalid file type. Please select a .sql file.</span>
+            </div>
+        `;
+        return;
+    }
+    
+    // Set the filename as caption - NO INSTRUCTION TEXT HERE
+    thumbnailElement.innerHTML = `
+        <div class="file-info">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="16" y1="13" x2="8" y2="13"></line>
+                <line x1="16" y1="17" x2="8" y2="17"></line>
+                <polyline points="10 9 9 9 8 9"></polyline>
+            </svg>
+            <span class="filename">${file.name}</span>
+            <span class="file-size">${formatFileSize(file.size)}</span>
+        </div>
+    `;
+    
+    // We don't need to show the preview when a file is already selected
+    // This keeps the display clean and focused on the selected file
+}
+
+/**
+ * Format file size in human-readable format
+ */
+function formatFileSize(bytes) {
+    const units = ['B', 'KB', 'MB', 'GB'];
+    let size = bytes;
+    let unitIndex = 0;
+    
+    while (size >= 1024 && unitIndex < units.length - 1) {
+        size /= 1024;
+        unitIndex++;
+    }
+    
+    return size.toFixed(1) + ' ' + units[unitIndex];
 }
 
 /**
@@ -147,6 +304,12 @@ function openTab(evt, tabName) {
     }
     document.getElementById(tabName).style.display = "block";
     evt.currentTarget.className += " active";
+    
+    // Update ARIA attributes
+    for (i = 0; i < tablinks.length; i++) {
+        tablinks[i].setAttribute('aria-selected', 'false');
+    }
+    evt.currentTarget.setAttribute('aria-selected', 'true');
 }
 
 /**
