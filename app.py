@@ -12,6 +12,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 # Import converters
 from converters.php_converter import convert_sql_to_php_array, analyze_sql_file
 from converters.laravel_converter import convert_sql_to_laravel_migration
+from converters.excel_converter import convert_sql_to_excel, analyze_sql_file_for_excel
 from exceptions import SQLConverterError, ValidationError, SQLParsingError, FileError, ConversionError
 
 import json
@@ -275,3 +276,149 @@ async def laravel_converter(background_tasks: BackgroundTasks, file: UploadFile 
     """
     logger.info(f"Converting SQL to Laravel migration: {file.filename}")
     return await convert_sql_to_laravel_migration(background_tasks, file)
+
+@app.post("/analyze/excel")
+async def analyze_excel(request: Request, file: UploadFile = File(...)):
+    """
+    Analyze SQL file for Excel conversion and redirect to column selection page.
+    
+    Args:
+        request: FastAPI Request object
+        file: Uploaded SQL file
+        
+    Returns:
+        HTMLResponse: Column selection page for Excel
+    """
+    logger.info(f"Analyzing SQL file for Excel conversion: {file.filename}")
+    
+    try:
+        # Analyze SQL file and get table columns
+        table_columns = await analyze_sql_file_for_excel(file)
+        
+        # Create a temporary file to store the table_columns data
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.json', mode='w') as temp_file:
+            json.dump(table_columns, temp_file)
+            temp_path = temp_file.name
+        
+        # Store the file content in a temp storage
+        temp_content_path = tempfile.NamedTemporaryFile(delete=False, suffix='.sql').name
+        file.file.seek(0)  # Rewind the file
+        content = await file.read()
+        with open(temp_content_path, 'wb') as f:
+            f.write(content)
+        
+        logger.info(f"SQL analysis complete for {file.filename}. Found {len(table_columns)} tables.")
+        
+        # Redirect to the column selection page for Excel
+        return templates.TemplateResponse(
+            "column_select_excel.html", 
+            {
+                "request": request,
+                "table_columns": table_columns,
+                "temp_path": temp_path,
+                "temp_content_path": temp_content_path,
+                "filename": file.filename
+            }
+        )
+    except Exception as e:
+        # Delete temp files if they were created
+        for path_var in ['temp_path', 'temp_content_path']:
+            if path_var in locals() and os.path.exists(locals()[path_var]):
+                try:
+                    os.unlink(locals()[path_var])
+                except Exception:
+                    pass
+        
+        # Re-raise exception for the exception handler
+        raise
+
+@app.post("/convert/excel")
+async def excel_converter(
+    background_tasks: BackgroundTasks, 
+    request: Request,
+    file: UploadFile = File(None),
+    temp_path: str = Form(None),
+    temp_content_path: str = Form(None),
+    filename: str = Form(None)
+):
+    """
+    Convert SQL to Excel workbook.
+    
+    Args:
+        background_tasks: FastAPI BackgroundTasks object
+        request: FastAPI Request object
+        file: Uploaded SQL file (direct conversion)
+        temp_path: Path to temporary JSON file with table_columns data (from column selection)
+        temp_content_path: Path to temporary SQL file (from column selection)
+        filename: Original filename (from column selection)
+        
+    Returns:
+        StreamingResponse: Excel file to download
+    """
+    # If we have form data with selected columns (from column selection page)
+    if temp_path and temp_content_path:
+        logger.info(f"Converting SQL with column selection to Excel. Original file: {filename}")
+        
+        try:
+            # Check if temp files exist
+            for path, desc in [(temp_path, "column data"), (temp_content_path, "SQL content")]:
+                if not os.path.exists(path):
+                    logger.error(f"Temp file not found: {path}")
+                    raise ValidationError(f"Session expired. Please restart the column selection process. (Missing {desc})")
+            
+            # Get selected columns from form data
+            form_data = await request.form()
+            table_filters = {}
+            
+            # Load the table columns from the temporary file
+            with open(temp_path, 'r') as f:
+                table_columns = json.load(f)
+            
+            # Process selected columns from form data
+            for table, columns in table_columns.items():
+                selected_for_table = []
+                
+                for column in columns:
+                    checkbox_name = f"{table}_{column}"
+                    
+                    # Check if the column is selected (checkbox is checked)
+                    if checkbox_name in form_data:
+                        selected_for_table.append(column)
+                
+                if selected_for_table:  # Only add if at least one column is selected
+                    table_filters[table] = selected_for_table
+            
+            # Create a synthetic UploadFile
+            synthetic_file = UploadFile(
+                filename=filename,
+                file=open(temp_content_path, 'rb')
+            )
+            
+            # Convert with selected columns
+            result = await convert_sql_to_excel(background_tasks, synthetic_file, table_filters)
+            
+            # Clean up temp files after processing is complete
+            try:
+                background_tasks.add_task(os.unlink, temp_path)
+                background_tasks.add_task(os.unlink, temp_content_path)
+            except Exception as e:
+                # Log but don't fail on cleanup errors
+                logger.warning(f"Failed to clean up temp files: {str(e)}")
+                
+            return result
+            
+        except Exception as e:
+            # Clean up temp files if there was an error
+            for path in [temp_path, temp_content_path]:
+                if path and os.path.exists(path):
+                    try:
+                        os.unlink(path)
+                    except Exception:
+                        pass
+            
+            # Re-raise for the exception handler
+            raise
+    else:
+        # Regular direct conversion (no column selection)
+        logger.info(f"Direct SQL to Excel conversion for file: {file.filename}")
+        return await convert_sql_to_excel(background_tasks, file)

@@ -23,6 +23,7 @@
         <div class="tab" role="tablist">
             <button class="tablinks" onclick="openTab(event, 'PHPArray')" id="defaultOpen" role="tab" aria-selected="true" aria-controls="PHPArray">PHP Array</button>
             <button class="tablinks" onclick="openTab(event, 'LaravelMigration')" role="tab" aria-selected="false" aria-controls="LaravelMigration">Laravel Migration</button>
+            <button class="tablinks" onclick="openTab(event, 'ExcelExport')" role="tab" aria-selected="false" aria-controls="ExcelExport">Excel Export</button>
         </div>
 
         <div id="PHPArray" class="tabcontent" role="tabpanel" aria-labelledby="defaultOpen">
@@ -58,6 +59,29 @@
                     <input type="file" name="file" id="laravel-file" accept=".sql" required aria-required="true">
                 </div>
                 <button type="submit" class="submit-button">Convert to Laravel Migration</button>
+            </form>
+        </div>
+
+        <div id="ExcelExport" class="tabcontent" role="tabpanel" aria-labelledby="excel-tab">
+            <h2>SQL to Excel Converter</h2>
+            <p>Convert your SQL INSERT statements to Excel workbooks with the ability to select which columns to include.</p>
+            
+            <form action="/analyze/excel" method="post" enctype="multipart/form-data" class="upload-form">
+                <div class="file-upload">
+                    <label for="excel-analyze-file">Select SQL file:</label>
+                    <input type="file" name="file" id="excel-analyze-file" accept=".sql" required aria-required="true">
+                </div>
+                <button type="submit" class="submit-button">Analyze & Select Columns</button>
+            </form>
+            
+            <div class="divider" role="separator" aria-label="or">OR</div>
+            
+            <form action="/convert/excel" method="post" enctype="multipart/form-data" class="upload-form">
+                <div class="file-upload">
+                    <label for="excel-direct-file">Select SQL file:</label>
+                    <input type="file" name="file" id="excel-direct-file" accept=".sql" required aria-required="true">
+                </div>
+                <button type="submit" class="submit-button">Convert All Columns to Excel</button>
             </form>
         </div>
         
