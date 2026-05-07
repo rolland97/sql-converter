@@ -1,37 +1,18 @@
 """
 Module for converting SQL INSERT statements to PHP arrays.
 """
-import re
-from fastapi import HTTPException
 from utils.file_utils import create_temp_file, cleanup_temp_file
 from fastapi.responses import FileResponse
 from exceptions import SQLParsingError, ValidationError, ConversionError, FileError
+from converters.insert_parser import (
+    get_line_number,
+    parse_insert_statements,
+    process_sql_escapes,
+)
 import logging
 
 # Configure logging
 logger = logging.getLogger(__name__)
-
-def get_line_number(content, position):
-    """Helper function to get line number from string position."""
-    return content[:position].count('\n') + 1
-
-def process_sql_escapes(s):
-    """Process SQL escape sequences in a string."""
-    # Replace common SQL escape sequences
-    replacements = {
-        "\\'": "'",  # Single quote
-        '\\"': '"',  # Double quote
-        '\\\\': '\\', # Backslash
-        '\\n': '\n',  # Newline
-        '\\r': '\r',  # Carriage return
-        '\\t': '\t',  # Tab
-    }
-    
-    result = s
-    for escape_seq, replacement in replacements.items():
-        result = result.replace(escape_seq, replacement)
-    
-    return result
 
 def parse_sql_content(content):
     """
@@ -47,132 +28,37 @@ def parse_sql_content(content):
     Raises:
         SQLParsingError: If SQL parsing fails
     """
-    # Extract INSERT statements
-    insert_pattern = r"INSERT INTO `(\w+)` \((.*?)\) VALUES\s*([\s\S]*?)(?:;|\Z)"
-    
-    try:
-        matches = re.findall(insert_pattern, content, re.DOTALL)
-        if not matches:
-            # Try to find any INSERT statement to provide better error
-            basic_insert_pattern = r"INSERT INTO.*?VALUES"
-            basic_matches = re.findall(basic_insert_pattern, content, re.DOTALL)
-            
-            if basic_matches:
-                # Found some INSERT statements but they don't match our expected format
-                first_match = basic_matches[0]
-                match_position = content.find(first_match)
-                line_number = get_line_number(content, match_position)
-                snippet = first_match[:50] + "..." if len(first_match) > 50 else first_match
-                
-                raise SQLParsingError(
-                    "Found INSERT statements but couldn't parse them. Ensure proper MySQL format.", 
-                    sql_snippet=snippet,
-                    line_number=line_number
-                )
-            else:
-                # No INSERT statements found at all
-                raise SQLParsingError("No INSERT statements found in the SQL file.")
-    except Exception as e:
-        if isinstance(e, SQLParsingError):
-            raise
-        raise SQLParsingError(f"Failed to parse SQL: {str(e)}")
-    
+    parsed_tables = parse_insert_statements(content)
     result = {}
-    table_columns = {}  # Store columns for each table
-    
-    for match in matches:
-        table_name = match[0]
-        
-        # Clean column names - strip backticks and whitespace
-        columns = []
-        for col in match[1].split(','):
-            # Remove backticks and strip whitespace
-            clean_col = col.strip().strip('`')
-            columns.append(clean_col)
-            
-        values_block = match[2]
-        
-        # Store columns for the table
+    table_columns = {}
+
+    for table_name, table_data in parsed_tables.items():
+        columns = table_data["columns"]
         table_columns[table_name] = columns
-        
-        if table_name not in result:
-            result[table_name] = []
-        
-        try:
-            # Extract individual rows with a more robust pattern
-            # This pattern supports nested parentheses and complex strings
-            row_pattern = r"\(((?:[^()]|\([^()]*\))*)\)"
-            rows = re.findall(row_pattern, values_block)
-            
-            if not rows:
-                match_position = content.find(values_block)
-                line_number = get_line_number(content, match_position)
-                snippet = values_block[:50] + "..." if len(values_block) > 50 else values_block
-                
-                raise SQLParsingError(
-                    f"Could not extract VALUES from table {table_name}",
-                    sql_snippet=snippet,
-                    line_number=line_number
+        result.setdefault(table_name, [])
+
+        for row_idx, raw_values in enumerate(table_data["rows"]):
+            processed_values = [
+                "null" if value is None else value
+                for value in raw_values
+            ]
+
+            if len(processed_values) < len(columns):
+                logger.warning(
+                    f"Row {row_idx+1} in table {table_name} has fewer values than columns. "
+                    f"Expected {len(columns)}, got {len(processed_values)}. Filling with nulls."
                 )
-            
-            for row_idx, row in enumerate(rows):
-                # Improved value parsing
-                # Use a more robust regex pattern that can handle complex strings and special characters
-                values_pattern = r"'((?:[^'\\]|\\.)*)'|\"((?:[^\"\\]|\\.)*)\"|\b(NULL)\b|(-?\d+(?:\.\d+)?)"
-                matches = re.findall(values_pattern, row, re.IGNORECASE)
-                
-                # Process values
-                processed_values = []
-                for match in matches:
-                    single_quote_str, double_quote_str, null_val, num_val = match
-                    
-                    if null_val.upper() == 'NULL':
-                        processed_values.append('null')  # PHP null
-                    elif num_val:
-                        processed_values.append(num_val)  # Number
-                    elif single_quote_str != '':
-                        processed_str = process_sql_escapes(single_quote_str)
-                        processed_values.append(processed_str)  # String in single quotes
-                    elif double_quote_str != '':
-                        processed_str = process_sql_escapes(double_quote_str)
-                        processed_values.append(processed_str)  # String in double quotes
-                    else:
-                        processed_values.append("None")  # Fallback, shouldn't happen
-                
-                # Ensure the number of values matches the number of columns
-                if len(processed_values) < len(columns):
-                    # If there are missing values, fill with nulls
-                    logger.warning(
-                        f"Row {row_idx+1} in table {table_name} has fewer values than columns. "
-                        f"Expected {len(columns)}, got {len(processed_values)}. Filling with nulls."
-                    )
-                    processed_values.extend(['null'] * (len(columns) - len(processed_values)))
-                
-                if len(processed_values) > len(columns):
-                    match_position = content.find(row)
-                    line_number = get_line_number(content, match_position)
-                    snippet = row[:50] + "..." if len(row) > 50 else row
-                    
-                    logger.warning(
-                        f"Row {row_idx+1} in table {table_name} has more values than columns. "
-                        f"Expected {len(columns)}, got {len(processed_values)}. Extra values will be ignored."
-                    )
-                    # Truncate to match column count
-                    processed_values = processed_values[:len(columns)]
-                
-                # Create a dictionary for this row
-                row_dict = dict(zip(columns, processed_values))
-                result[table_name].append(row_dict)
-                
-        except Exception as e:
-            if isinstance(e, SQLParsingError):
-                raise
-            # Provide context about which table was being processed
-            match_position = content.find(f"INSERT INTO `{table_name}`")
-            line_number = get_line_number(content, match_position)
-            raise SQLParsingError(
-                f"Error parsing data for table {table_name}: {str(e)}",
-                line_number=line_number
+                processed_values.extend(["null"] * (len(columns) - len(processed_values)))
+
+            if len(processed_values) > len(columns):
+                logger.warning(
+                    f"Row {row_idx+1} in table {table_name} has more values than columns. "
+                    f"Expected {len(columns)}, got {len(processed_values)}. Extra values will be ignored."
+                )
+                processed_values = processed_values[:len(columns)]
+
+            result[table_name].append(
+                dict(zip(columns, processed_values))
             )
 
     if not result:
