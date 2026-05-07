@@ -8,7 +8,7 @@ class InsertParserTest(unittest.TestCase):
         sql = '''
         INSERT INTO `organization` (`id`, `name`, `parent_id`, `supervisor`, `deleted_by`, `deleted_at`) VALUES
             (21, "CORPORATE ACCOUNTS SUPPORT", 2, NULL, NULL, NULL),
-            (23, "CREATIVE, IT AND PROGRAMMING &amp; TRANSLATION", 2, NULL, NULL, NULL),
+            (23, "CREATIVE, IT AND PROGRAMMING &amp; TRANSLATION; APAC", 2, NULL, NULL, NULL),
             (24, "E-COMMERCE", 2, NULL, NULL, NULL);
         '''
 
@@ -21,7 +21,7 @@ class InsertParserTest(unittest.TestCase):
         )
         self.assertEqual(3, len(parsed["organization"]["rows"]))
         self.assertEqual(
-            "CREATIVE, IT AND PROGRAMMING &amp; TRANSLATION",
+            "CREATIVE, IT AND PROGRAMMING &amp; TRANSLATION; APAC",
             parsed["organization"]["rows"][1][1],
         )
         self.assertEqual("E-COMMERCE", parsed["organization"]["rows"][2][1])
