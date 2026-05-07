@@ -73,6 +73,13 @@ def parse_insert_statements(content):
                 line_number=get_line_number(content, position),
             )
 
+        if table_name in parsed and parsed[table_name]["columns"] != columns:
+            raise SQLParsingError(
+                f"Conflicting column list for repeated INSERT into table {table_name}.",
+                sql_snippet=statement[:80],
+                line_number=get_line_number(content, position),
+            )
+
         if table_name not in parsed:
             parsed[table_name] = {"columns": columns, "rows": []}
 

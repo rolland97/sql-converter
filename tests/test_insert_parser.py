@@ -59,6 +59,21 @@ class InsertParserTest(unittest.TestCase):
 
         self.assertEqual("a'", parsed["t"]["rows"][0][0])
 
+    def test_raises_when_repeated_table_uses_different_columns(self):
+        sql = """
+        INSERT INTO t (a,b) VALUES (1,2);
+        INSERT INTO t (b,a) VALUES (3,4);
+        """
+
+        with self.assertRaisesRegex(SQLParsingError, "Conflicting column list"):
+            parse_insert_statements(sql)
+
+    def test_raises_for_ambiguous_backslashes_before_doubled_quote(self):
+        sql = r"INSERT INTO t (v) VALUES ('a\\'');"
+
+        with self.assertRaises(SQLParsingError):
+            parse_insert_statements(sql)
+
     def test_raises_when_insert_has_no_rows(self):
         with self.assertRaisesRegex(SQLParsingError, "Could not extract VALUES"):
             parse_insert_statements("INSERT INTO t (v) VALUES ;")
