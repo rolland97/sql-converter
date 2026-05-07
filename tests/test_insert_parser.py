@@ -1,5 +1,6 @@
 import unittest
 
+from exceptions import SQLParsingError
 from converters.insert_parser import parse_insert_statements
 
 
@@ -36,15 +37,35 @@ class InsertParserTest(unittest.TestCase):
         self.assertEqual("next", parsed["notes"]["rows"][1][1])
 
     def test_parses_parentheses_and_escaped_quotes_inside_values(self):
-        sql = r"INSERT INTO `items` (`id`, `name`, `amount`) VALUES (1, 'Lab (Asia) O\\'Brien', -12.50);"
+        sql = "INSERT INTO `items` (`id`, `name`, `amount`) VALUES (1, 'Lab (Asia) O\\'Brien', -12.50);"
 
         parsed = parse_insert_statements(sql)
 
         self.assertEqual("Lab (Asia) O'Brien", parsed["items"]["rows"][0][1])
         self.assertEqual("-12.50", parsed["items"]["rows"][0][2])
 
+    def test_parses_value_ending_with_escaped_backslashes(self):
+        sql = r"INSERT INTO `paths` (`value`) VALUES ('C:\\\\');"
+
+        parsed = parse_insert_statements(sql)
+
+        self.assertEqual(1, len(parsed["paths"]["rows"]))
+        self.assertEqual(r"C:\\", parsed["paths"]["rows"][0][0])
+
+    def test_raises_when_insert_has_no_rows(self):
+        with self.assertRaisesRegex(SQLParsingError, "Could not extract VALUES"):
+            parse_insert_statements("INSERT INTO t (v) VALUES ;")
+
+    def test_decodes_doubled_quotes_inside_quoted_values(self):
+        sql = """INSERT INTO t (single_value, double_value) VALUES ('O''Brien', "A ""quoted"" value");"""
+
+        parsed = parse_insert_statements(sql)
+
+        self.assertEqual("O'Brien", parsed["t"]["rows"][0][0])
+        self.assertEqual('A "quoted" value', parsed["t"]["rows"][0][1])
+
     def test_raises_when_no_insert_exists(self):
-        with self.assertRaisesRegex(Exception, "No INSERT statements found"):
+        with self.assertRaisesRegex(SQLParsingError, "No INSERT statements found"):
             parse_insert_statements("CREATE TABLE `users` (`id` int);")
 
 

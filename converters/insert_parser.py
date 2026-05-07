@@ -14,8 +14,6 @@ def get_line_number(content, position):
 def process_sql_escapes(value):
     """Process SQL escape sequences in a quoted string."""
     replacements = {
-        "\\\\'": "'",
-        '\\\\"': '"',
         "\\'": "'",
         '\\"': '"',
         "\\\\": "\\",
@@ -69,6 +67,11 @@ def parse_insert_statements(content):
         table_name, columns_sql, values_sql = header.groups()
         columns = [_clean_identifier(column) for column in _split_top_level(columns_sql)]
         rows = [_parse_row(row, table_name, content, position) for row in _split_rows(values_sql)]
+        if not rows:
+            raise SQLParsingError(
+                f"Could not extract VALUES from table {table_name}",
+                line_number=get_line_number(content, position),
+            )
 
         if table_name not in parsed:
             parsed[table_name] = {"columns": columns, "rows": []}
@@ -104,18 +107,18 @@ def _extract_insert_statements(content):
 
 def _find_statement_end(content, start):
     quote = None
-    escaped = False
+    skip_doubled_quote = False
 
     for index in range(start, len(content)):
         char = content[index]
 
-        if escaped:
-            escaped = False
-            continue
-
         if quote:
-            if char == "\\":
-                escaped = True
+            if skip_doubled_quote:
+                skip_doubled_quote = False
+                continue
+
+            if char == quote and _is_doubled_quote(content, index, quote):
+                skip_doubled_quote = True
             elif char == quote and not _is_backslash_escaped(content, index):
                 quote = None
             continue
@@ -136,17 +139,17 @@ def _split_top_level(text):
     parts = []
     start = 0
     quote = None
-    escaped = False
+    skip_doubled_quote = False
     depth = 0
 
     for index, char in enumerate(text):
-        if escaped:
-            escaped = False
-            continue
-
         if quote:
-            if char == "\\":
-                escaped = True
+            if skip_doubled_quote:
+                skip_doubled_quote = False
+                continue
+
+            if char == quote and _is_doubled_quote(text, index, quote):
+                skip_doubled_quote = True
             elif char == quote and not _is_backslash_escaped(text, index):
                 quote = None
             continue
@@ -171,18 +174,18 @@ def _split_top_level(text):
 def _split_rows(values_sql):
     rows = []
     quote = None
-    escaped = False
+    skip_doubled_quote = False
     depth = 0
     row_start = None
 
     for index, char in enumerate(values_sql):
-        if escaped:
-            escaped = False
-            continue
-
         if quote:
-            if char == "\\":
-                escaped = True
+            if skip_doubled_quote:
+                skip_doubled_quote = False
+                continue
+
+            if char == quote and _is_doubled_quote(values_sql, index, quote):
+                skip_doubled_quote = True
             elif char == quote and not _is_backslash_escaped(values_sql, index):
                 quote = None
             continue
@@ -212,8 +215,19 @@ def _parse_row(row_sql, table_name, content, statement_position):
     return [_parse_value_token(token) for token in _split_top_level(row_sql)]
 
 
+def _is_doubled_quote(text, index, quote):
+    return index + 1 < len(text) and text[index + 1] == quote
+
+
 def _is_backslash_escaped(text, index):
-    return index > 0 and text[index - 1] == "\\"
+    backslash_count = 0
+    cursor = index - 1
+
+    while cursor >= 0 and text[cursor] == "\\":
+        backslash_count += 1
+        cursor -= 1
+
+    return backslash_count % 2 == 1
 
 
 def _parse_value_token(token):
@@ -223,7 +237,8 @@ def _parse_value_token(token):
         return None
 
     if len(token) >= 2 and token[0] in ("'", '"') and token[-1] == token[0]:
-        return process_sql_escapes(token[1:-1])
+        quote = token[0]
+        return process_sql_escapes(token[1:-1].replace(quote * 2, quote))
 
     if re.fullmatch(r"-?\d+(?:\.\d+)?", token):
         return token
