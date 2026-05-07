@@ -52,6 +52,14 @@ class InsertParserTest(unittest.TestCase):
         self.assertEqual(1, len(parsed["paths"]["rows"]))
         self.assertEqual(r"C:\\", parsed["paths"]["rows"][0][0])
 
+    def test_does_not_chain_escape_decoding(self):
+        sql = r"INSERT INTO t (v) VALUES ('C:\\new');"
+
+        parsed = parse_insert_statements(sql)
+
+        self.assertEqual(r"C:\new", parsed["t"]["rows"][0][0])
+        self.assertNotIn("\n", parsed["t"]["rows"][0][0])
+
     def test_parses_backslash_escaped_quote_before_closing_quote(self):
         sql = r"INSERT INTO t (v) VALUES ('a\'');"
 

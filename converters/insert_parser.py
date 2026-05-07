@@ -13,20 +13,33 @@ def get_line_number(content, position):
 
 def process_sql_escapes(value):
     """Process SQL escape sequences in a quoted string."""
-    replacements = {
-        "\\'": "'",
-        '\\"': '"',
-        "\\\\": "\\",
-        "\\n": "\n",
-        "\\r": "\r",
-        "\\t": "\t",
+    escape_replacements = {
+        "'": "'",
+        '"': '"',
+        "\\": "\\",
+        "n": "\n",
+        "r": "\r",
+        "t": "\t",
     }
 
-    result = value
-    for escape_seq, replacement in replacements.items():
-        result = result.replace(escape_seq, replacement)
+    result = []
+    index = 0
+    while index < len(value):
+        char = value[index]
+        if char != "\\" or index + 1 >= len(value):
+            result.append(char)
+            index += 1
+            continue
 
-    return result
+        escaped_char = value[index + 1]
+        if escaped_char in escape_replacements:
+            result.append(escape_replacements[escaped_char])
+        else:
+            result.append("\\")
+            result.append(escaped_char)
+        index += 2
+
+    return "".join(result)
 
 
 def parse_insert_statements(content):
