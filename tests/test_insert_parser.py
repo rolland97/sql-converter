@@ -52,6 +52,13 @@ class InsertParserTest(unittest.TestCase):
         self.assertEqual(1, len(parsed["paths"]["rows"]))
         self.assertEqual(r"C:\\", parsed["paths"]["rows"][0][0])
 
+    def test_parses_backslash_escaped_quote_before_closing_quote(self):
+        sql = r"INSERT INTO t (v) VALUES ('a\'');"
+
+        parsed = parse_insert_statements(sql)
+
+        self.assertEqual("a'", parsed["t"]["rows"][0][0])
+
     def test_raises_when_insert_has_no_rows(self):
         with self.assertRaisesRegex(SQLParsingError, "Could not extract VALUES"):
             parse_insert_statements("INSERT INTO t (v) VALUES ;")

@@ -117,10 +117,13 @@ def _find_statement_end(content, start):
                 skip_doubled_quote = False
                 continue
 
-            if char == quote and _is_doubled_quote(content, index, quote):
-                skip_doubled_quote = True
-            elif char == quote and not _is_backslash_escaped(content, index):
-                quote = None
+            if char == quote:
+                if _is_backslash_escaped(content, index):
+                    continue
+                if _is_doubled_quote(content, index, quote):
+                    skip_doubled_quote = True
+                else:
+                    quote = None
             continue
 
         if char in ("'", '"'):
@@ -148,10 +151,13 @@ def _split_top_level(text):
                 skip_doubled_quote = False
                 continue
 
-            if char == quote and _is_doubled_quote(text, index, quote):
-                skip_doubled_quote = True
-            elif char == quote and not _is_backslash_escaped(text, index):
-                quote = None
+            if char == quote:
+                if _is_backslash_escaped(text, index):
+                    continue
+                if _is_doubled_quote(text, index, quote):
+                    skip_doubled_quote = True
+                else:
+                    quote = None
             continue
 
         if char in ("'", '"'):
@@ -184,10 +190,13 @@ def _split_rows(values_sql):
                 skip_doubled_quote = False
                 continue
 
-            if char == quote and _is_doubled_quote(values_sql, index, quote):
-                skip_doubled_quote = True
-            elif char == quote and not _is_backslash_escaped(values_sql, index):
-                quote = None
+            if char == quote:
+                if _is_backslash_escaped(values_sql, index):
+                    continue
+                if _is_doubled_quote(values_sql, index, quote):
+                    skip_doubled_quote = True
+                else:
+                    quote = None
             continue
 
         if char in ("'", '"'):
